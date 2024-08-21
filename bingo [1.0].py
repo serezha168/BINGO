@@ -6,7 +6,6 @@ from typing import List, Tuple
 WINDOW_SIZE = (800, 750)
 CELL_SIZE = 90
 MARGIN = 20
-GRID_SIZE = 5
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 RED = (255, 0, 0)
@@ -26,16 +25,18 @@ class BingoGame:
         pygame.display.set_caption("Бинго")
         self.clock = pygame.time.Clock()
         self.running = True
-        self.grid_size = GRID_SIZE
+        self.available_sizes = [3, 4, 5, 6, 7]
+        self.current_size_index = 2  # Начинаем с 5x5
+        self.grid_size = self.available_sizes[self.current_size_index]
         self.cell_size = CELL_SIZE
         self.grid_offset = (MARGIN, MARGIN)
         self.input_rect = pygame.Rect(0, 0, INPUT_BOX_WIDTH, INPUT_BOX_HEIGHT)
         self.button_rect = pygame.Rect(0, 0, BUTTON_WIDTH, BUTTON_HEIGHT)
+        self.size_button_rect = pygame.Rect(0, 0, BUTTON_WIDTH, BUTTON_HEIGHT)
         self.input_text = ''
         self.font = pygame.font.Font(None, FONT_SIZE)
         self.title_font = pygame.font.Font(None, 48)
         self.subtitle_font = pygame.font.Font(None, 20)
-        self.words = []
         self.board = self.generate_board()
         self.marked_cells = set()
         self.message = ""
@@ -64,6 +65,8 @@ class BingoGame:
                         self.input_active = True
                     elif self.button_rect.collidepoint(event.pos):
                         self.add_word()
+                    elif self.size_button_rect.collidepoint(event.pos):
+                        self.change_grid_size()
                     else:
                         self.input_active = False
                         self.toggle_cell(event.pos)
@@ -119,11 +122,11 @@ class BingoGame:
 
     def adjust_scale(self):
         max_cell_size = min((self.width - 2 * MARGIN) // self.grid_size,
-                            (self.height - 2 * MARGIN - INPUT_BOX_HEIGHT - 150) // self.grid_size)
+                            (self.height - 2 * MARGIN - INPUT_BOX_HEIGHT - 200) // self.grid_size)
         self.cell_size = max_cell_size
         self.grid_offset = (
             (self.width - self.grid_size * self.cell_size) // 2,
-            max(60, (self.height - self.grid_size * self.cell_size - INPUT_BOX_HEIGHT - 150) // 2)
+            max(120, (self.height - self.grid_size * self.cell_size - INPUT_BOX_HEIGHT - 200) // 2)
         )
 
         input_y = self.grid_offset[1] + self.grid_size * self.cell_size + 30
@@ -131,8 +134,18 @@ class BingoGame:
         start_x = (self.width - total_width) // 2
         self.input_rect.topleft = (start_x, input_y)
         self.button_rect.topleft = (start_x + INPUT_BOX_WIDTH + 20, input_y)
+
+        self.size_button_rect.topleft = ((self.width - BUTTON_WIDTH) // 2, self.grid_offset[1] - 60)
+
         self.message_rect.topleft = (0, self.button_rect.bottom + 20)
         self.message_rect.width = self.width
+
+    def change_grid_size(self):
+        self.current_size_index = (self.current_size_index + 1) % len(self.available_sizes)
+        self.grid_size = self.available_sizes[self.current_size_index]
+        self.board = self.generate_board()
+        self.marked_cells = set()
+        self.adjust_scale()
 
     def wrap_text(self, text, font_size, max_width):
         if font_size not in self.font_cache:
@@ -154,38 +167,40 @@ class BingoGame:
 
     def draw(self):
         self.screen.fill(WHITE)
-        
         # Отрисовка заголовка
         title_text = self.title_font.render("Bingo", True, BLACK)
-        title_rect = title_text.get_rect(center=(self.width // 2, self.grid_offset[1] - 40))
+        title_rect = title_text.get_rect(center=(self.width // 2, self.grid_offset[1] - 90))
         self.screen.blit(title_text, title_rect)
-        
+
+        # Отрисовка кнопки изменения размера
+        pygame.draw.rect(self.screen, GRAY, self.size_button_rect)
+        pygame.draw.rect(self.screen, BLACK, self.size_button_rect, 2)
+        size_text = self.font.render(f"{self.grid_size}x{self.grid_size}", True, BLACK)
+        size_text_rect = size_text.get_rect(center=self.size_button_rect.center)
+        self.screen.blit(size_text, size_text_rect)
+
         # Отрисовка сетки и слов
         for i in range(self.grid_size):
             for j in range(self.grid_size):
                 x = self.grid_offset[0] + i * self.cell_size
                 y = self.grid_offset[1] + j * self.cell_size
                 rect = pygame.Rect(x, y, self.cell_size, self.cell_size)
-                
                 if self.selected_cell == (i, j):
                     pygame.draw.rect(self.screen, YELLOW, rect)
                 else:
                     pygame.draw.rect(self.screen, GRAY, rect)
                 pygame.draw.rect(self.screen, BLACK, rect, 2)
-                
                 word = self.board[j][i]
                 if word:
                     self.draw_word(word, x, y)
-                
                 if (i, j) in self.marked_cells:
                     pygame.draw.line(self.screen, RED, (x + 5, y + 5),
                                      (x + self.cell_size - 5, y + self.cell_size - 5), 4)
                     pygame.draw.line(self.screen, RED, (x + self.cell_size - 5, y + 5),
                                      (x + 5, y + self.cell_size - 5), 4)
-        
+
         # Отрисовка интерфейса
         self.draw_interface()
-        
         pygame.display.flip()
 
     def draw_word(self, word, x, y):
@@ -194,7 +209,6 @@ class BingoGame:
         while font_size > 10 and (len(lines) > 3 or max(self.font_cache[font_size].size(line)[0] for line in lines) > self.cell_size - 10):
             font_size -= 1
             lines = self.wrap_text(word, font_size, self.cell_size - 10)
-        
         font = self.font_cache[font_size]
         y_offset = y + (self.cell_size - len(lines) * font.get_linesize()) // 2
         for line in lines:
