@@ -55,6 +55,8 @@ class BingoGame:
         FONT_PATH = "C:/Users/game4/Desktop/BINGO/font/helvetica_bold.otf"
         self.font = pygame.font.Font(FONT_PATH, FONT_SIZE)
         self.title_font = pygame.font.Font(FONT_PATH, 48)
+        self.animations = []
+        self.animation_speed = 5
 
     def generate_board(self) -> List[List[str]]:
         return [['' for _ in range(self.grid_size)] for _ in range(self.grid_size)]
@@ -103,6 +105,11 @@ class BingoGame:
                 self.marked_cells.remove(cell)
             else:
                 self.marked_cells.add(cell)
+                # Добавляем анимацию при отметке клетки
+                start_pos = (x, y)
+                end_pos = (self.grid_offset[0] + grid_x * self.cell_size + self.cell_size // 2,
+                           self.grid_offset[1] + grid_y * self.cell_size + self.cell_size // 2)
+                self.add_animation(start_pos, end_pos, 20)
 
     def edit_word(self, pos):
         x, y = pos
@@ -131,9 +138,16 @@ class BingoGame:
             self.message_timer -= 1
         else:
             self.message = ""
+        
+        # Обновление анимаций
+        for anim in self.animations[:]:
+            anim['progress'] += self.animation_speed
+            if anim['progress'] >= anim['duration']:
+                self.animations.remove(anim)
 
     def adjust_scale(self):
-        max_cell_size = min((self.width - 2 * MARGIN) // self.grid_size, (self.height - 2 * MARGIN - INPUT_BOX_HEIGHT - 200) // self.grid_size)
+        max_cell_size = min((self.width - 2 * MARGIN) // self.grid_size,
+                            (self.height - 2 * MARGIN - INPUT_BOX_HEIGHT - 200) // self.grid_size)
         self.cell_size = max_cell_size
         self.grid_offset = (
             (self.width - self.grid_size * self.cell_size) // 2,
@@ -225,7 +239,6 @@ class BingoGame:
         title_text = self.title_font.render("Bingo", True, TEXT_COLOR)
         title_rect = title_text.get_rect(center=(self.width // 2, self.grid_offset[1] - 90))
         self.screen.blit(title_text, title_rect)
-
         self.draw_button(self.save_button_rect, "Сохранить")
         self.draw_button(self.size_button_rect, f"{self.grid_size}x{self.grid_size}")
         self.draw_button(self.load_button_rect, "Загрузить")
@@ -244,10 +257,20 @@ class BingoGame:
                 if word:
                     self.draw_word(word, x, y)
                 if (i, j) in self.marked_cells:
-                    pygame.draw.line(self.screen, ACCENT_COLOR, (x + 5, y + 5), (x + self.cell_size - 5, y + self.cell_size - 5), 4)
-                    pygame.draw.line(self.screen, ACCENT_COLOR, (x + self.cell_size - 5, y + 5), (x + 5, y + self.cell_size - 5), 4)
+                    pygame.draw.line(self.screen, (255, 0, 0), (x + 5, y + 5), (x + self.cell_size - 5, y + self.cell_size - 5), 4)
+                    pygame.draw.line(self.screen, (255, 0, 0), (x + self.cell_size - 5, y + 5), (x + 5, y + self.cell_size - 5), 4)
 
         self.draw_interface()
+
+        # Отрисовка анимаций
+        for anim in self.animations:
+            progress = anim['progress'] / anim['duration']
+            current_pos = (
+                anim['start_pos'][0] + (anim['end_pos'][0] - anim['start_pos'][0]) * progress,
+                anim['start_pos'][1] + (anim['end_pos'][1] - anim['start_pos'][1]) * progress
+            )
+            pygame.draw.circle(self.screen, (255, 0, 0), (int(current_pos[0]), int(current_pos[1])), 5)
+
         pygame.display.flip()
 
     def draw_button(self, rect, text):
@@ -296,6 +319,14 @@ class BingoGame:
         subtitle_text = self.subtitle_font.render("by serezha168", True, TEXT_COLOR)
         subtitle_rect = subtitle_text.get_rect(center=(self.width // 2, self.height - 20))
         self.screen.blit(subtitle_text, subtitle_rect)
+
+    def add_animation(self, start_pos, end_pos, duration):
+        self.animations.append({
+            'start_pos': start_pos,
+            'end_pos': end_pos,
+            'duration': duration,
+            'progress': 0
+        })
 
     def run(self):
         while self.running:
