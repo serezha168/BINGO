@@ -1,6 +1,9 @@
 import pygame
 import random
+import json
+import os
 from typing import List, Tuple
+from tkinter import Tk, filedialog
 
 # Константы
 WINDOW_SIZE = (800, 750)
@@ -33,6 +36,8 @@ class BingoGame:
         self.input_rect = pygame.Rect(0, 0, INPUT_BOX_WIDTH, INPUT_BOX_HEIGHT)
         self.button_rect = pygame.Rect(0, 0, BUTTON_WIDTH, BUTTON_HEIGHT)
         self.size_button_rect = pygame.Rect(0, 0, BUTTON_WIDTH, BUTTON_HEIGHT)
+        self.save_button_rect = pygame.Rect(0, 0, BUTTON_WIDTH, BUTTON_HEIGHT)
+        self.load_button_rect = pygame.Rect(0, 0, BUTTON_WIDTH, BUTTON_HEIGHT)
         self.input_text = ''
         self.font = pygame.font.Font(None, FONT_SIZE)
         self.title_font = pygame.font.Font(None, 48)
@@ -67,6 +72,10 @@ class BingoGame:
                         self.add_word()
                     elif self.size_button_rect.collidepoint(event.pos):
                         self.change_grid_size()
+                    elif self.save_button_rect.collidepoint(event.pos):
+                        self.save_preset()
+                    elif self.load_button_rect.collidepoint(event.pos):
+                        self.load_preset()
                     else:
                         self.input_active = False
                         self.toggle_cell(event.pos)
@@ -135,7 +144,13 @@ class BingoGame:
         self.input_rect.topleft = (start_x, input_y)
         self.button_rect.topleft = (start_x + INPUT_BOX_WIDTH + 20, input_y)
 
-        self.size_button_rect.topleft = ((self.width - BUTTON_WIDTH) // 2, self.grid_offset[1] - 60)
+        buttons_total_width = BUTTON_WIDTH * 3 + 20
+        buttons_start_x = (self.width - buttons_total_width) // 2
+        buttons_y = self.grid_offset[1] - 60
+
+        self.save_button_rect.topleft = (buttons_start_x, buttons_y)
+        self.size_button_rect.topleft = (buttons_start_x + BUTTON_WIDTH + 10, buttons_y)
+        self.load_button_rect.topleft = (buttons_start_x + BUTTON_WIDTH * 2 + 20, buttons_y)
 
         self.message_rect.topleft = (0, self.button_rect.bottom + 20)
         self.message_rect.width = self.width
@@ -146,6 +161,48 @@ class BingoGame:
         self.board = self.generate_board()
         self.marked_cells = set()
         self.adjust_scale()
+
+    def save_preset(self):
+        root = Tk()
+        root.withdraw()
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            initialfile=f"preset_{self.grid_size}x{self.grid_size}.json"
+        )
+        if file_path:
+            preset = {
+                "grid_size": self.grid_size,
+                "board": self.board,
+                "marked_cells": list(self.marked_cells)
+            }
+            with open(file_path, "w") as f:
+                json.dump(preset, f)
+            self.message = f"Пресет сохранен как {os.path.basename(file_path)}"
+        else:
+            self.message = "Сохранение отменено"
+        self.message_timer = 120
+
+    def load_preset(self):
+        root = Tk()
+        root.withdraw()
+        file_path = filedialog.askopenfilename(
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+        )
+        if file_path:
+            try:
+                with open(file_path, "r") as f:
+                    preset = json.load(f)
+                self.grid_size = preset["grid_size"]
+                self.board = preset["board"]
+                self.marked_cells = set(map(tuple, preset["marked_cells"]))
+                self.adjust_scale()
+                self.message = f"Пресет {os.path.basename(file_path)} загружен"
+            except Exception as e:
+                self.message = f"Ошибка при загрузке пресета: {str(e)}"
+        else:
+            self.message = "Загрузка отменена"
+        self.message_timer = 120
 
     def wrap_text(self, text, font_size, max_width):
         if font_size not in self.font_cache:
@@ -167,19 +224,15 @@ class BingoGame:
 
     def draw(self):
         self.screen.fill(WHITE)
-        # Отрисовка заголовка
+
         title_text = self.title_font.render("Bingo", True, BLACK)
         title_rect = title_text.get_rect(center=(self.width // 2, self.grid_offset[1] - 90))
         self.screen.blit(title_text, title_rect)
 
-        # Отрисовка кнопки изменения размера
-        pygame.draw.rect(self.screen, GRAY, self.size_button_rect)
-        pygame.draw.rect(self.screen, BLACK, self.size_button_rect, 2)
-        size_text = self.font.render(f"{self.grid_size}x{self.grid_size}", True, BLACK)
-        size_text_rect = size_text.get_rect(center=self.size_button_rect.center)
-        self.screen.blit(size_text, size_text_rect)
+        self.draw_button(self.save_button_rect, "Сохранить")
+        self.draw_button(self.size_button_rect, f"{self.grid_size}x{self.grid_size}")
+        self.draw_button(self.load_button_rect, "Загрузить")
 
-        # Отрисовка сетки и слов
         for i in range(self.grid_size):
             for j in range(self.grid_size):
                 x = self.grid_offset[0] + i * self.cell_size
@@ -199,9 +252,16 @@ class BingoGame:
                     pygame.draw.line(self.screen, RED, (x + self.cell_size - 5, y + 5),
                                      (x + 5, y + self.cell_size - 5), 4)
 
-        # Отрисовка интерфейса
         self.draw_interface()
+
         pygame.display.flip()
+
+    def draw_button(self, rect, text):
+        pygame.draw.rect(self.screen, GRAY, rect)
+        pygame.draw.rect(self.screen, BLACK, rect, 2)
+        button_text = self.font.render(text, True, BLACK)
+        button_text_rect = button_text.get_rect(center=rect.center)
+        self.screen.blit(button_text, button_text_rect)
 
     def draw_word(self, word, x, y):
         font_size = 24
